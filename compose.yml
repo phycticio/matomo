@@ -1,0 +1,60 @@
+services:
+
+  database:
+    image: mariadb:11.4
+    container_name: matomo-db
+    restart: unless-stopped
+    command: --max-allowed-packet=64MB
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-matomo}
+      MYSQL_USER: ${MYSQL_USER:-matomo}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./data/database:/var/lib/mysql
+    networks:
+      - matomo-internal
+
+  matomo:
+    image: matomo:5.1-fpm-alpine
+    container_name: matomo-app
+    restart: unless-stopped
+    depends_on:
+      - database
+    environment:
+      MATOMO_DATABASE_HOST: database
+      MATOMO_DATABASE_ADAPTER: mysql
+      MATOMO_DATABASE_TABLES_PREFIX: matomo_
+      MATOMO_DATABASE_USERNAME: ${MYSQL_USER:-matomo}
+      MATOMO_DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      MATOMO_DATABASE_DBNAME: ${MYSQL_DATABASE:-matomo}
+      PHP_MEMORY_LIMIT: 512M
+      MATOMO_MAIL_HOST: ${MATOMO_MAIL_HOST:-smtp-relay.brevo.com}
+      MATOMO_MAIL_PORT: ${MATOMO_MAIL_PORT:-2525}
+      MATOMO_MAIL_USERNAME: ${MATOMO_MAIL_USERNAME}
+      MATOMO_MAIL_PASSWORD: ${MATOMO_MAIL_PASSWORD}
+      MATOMO_MAIL_ENCRYPTION: ${MATOMO_MAIL_ENCRYPTION:-tls}
+    volumes:
+      - ./data/matomo:/var/www/html
+      - ./logs/matomo:/var/www/html/tmp/logs
+    networks:
+      - matomo-internal
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: matomo-nginx
+    restart: unless-stopped
+    depends_on:
+      - matomo
+    ports:
+      - "${NGINX_PORT:-8585}:80"
+    volumes:
+      - ./data/matomo:/var/www/html:ro
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - matomo-internal
+      
+networks:
+  matomo-internal:
+    driver: bridge
